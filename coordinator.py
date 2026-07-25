@@ -7,7 +7,6 @@ from collections.abc import Callable
 import logging
 
 from bleak import BleakError
-from bleak.exc import BleakDBusError
 from homeassistant.components import bluetooth
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_ADDRESS, CONF_NAME
@@ -33,31 +32,16 @@ from .parser import device_type_from_name, normalize_address
 
 _LOGGER = logging.getLogger(__name__)
 
-# DBus error names that indicate the device is off or the BLE adapter is busy
-_UNAVAILABLE_DBUS_ERRORS = frozenset(
-    [
-        "org.bluez.Error.InProgress",
-        "org.bluez.Error.NotReady",
-        "org.bluez.Error.NotAvailable",
-    ]
+_UPDATE_EXCEPTIONS = (
+    TyphurConnectionError,
+    TyphurError,
+    BleakError,
+    TimeoutError,
+    OSError,
+    asyncio.TimeoutError,
 )
 
-
-def _is_device_unavailable(err: BaseException) -> bool:
-    """Return True when the error signals the device is unreachable.
-
-    This covers:
-    - TyphurConnectionError: device not found via HA BLE registry.
-    - BleakDBusError with well-known unavailability codes (e.g. InProgress).
-    """
-    if isinstance(err, TyphurConnectionError):
-        return True
-    if isinstance(err, BleakDBusError):
-        return err.dbus_error in _UNAVAILABLE_DBUS_ERRORS
-    return False
-
-
-class TyphurDataUpdateCoordinator(DataUpdateCoordinator[BaseStationStatus | None]):
+class TyphurDataUpdateCoordinator(DataUpdateCoordinator[BaseStationStatus]):
     """Coordinate one Typhur Sync Gold BLE device."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -94,47 +78,27 @@ class TyphurDataUpdateCoordinator(DataUpdateCoordinator[BaseStationStatus | None
             self.hass, self._async_unavailable_callback, self.address, connectable=True
         )
 
-    async def _async_update_data(self) -> BaseStationStatus | None:
+    async def _async_update_data(self) -> BaseStationStatus:
         """Fetch the latest data from the BLE device."""
         try:
             return await self._async_fetch_status()
-        except (
-            TyphurConnectionError,
-            TyphurError,
-            BleakError,
-            TimeoutError,
-            OSError,
-            asyncio.TimeoutError,
-        ) as first_err:
+        except _UPDATE_EXCEPTIONS as first_err:
             _LOGGER.debug(
                 "Typhur %s: update failed, resetting BLE session and retrying once: %s",
                 self.address,
                 first_err,
             )
+
+        await self.client.disconnect()
+        await asyncio.sleep(1.0)
+
+        try:
+            return await self._async_fetch_status()
+        except _UPDATE_EXCEPTIONS as err:
             await self.client.disconnect()
-            await asyncio.sleep(1.0)
-            try:
-                return await self._async_fetch_status()
-            except (
-                TyphurConnectionError,
-                TyphurError,
-                BleakError,
-                TimeoutError,
-                OSError,
-                asyncio.TimeoutError,
-            ) as err:
-                await self.client.disconnect()
-                if _is_device_unavailable(err):
-                    _LOGGER.debug(
-                        "Typhur %s: device not reachable (off or BLE busy), "
-                        "skipping update: %s",
-                        self.address,
-                        err,
-                    )
-                    return None
-                raise UpdateFailed(
-                    f"Error communicating with Typhur device: {err}"
-                ) from err
+            raise UpdateFailed(
+                f"Error communicating with Typhur device: {err}"
+            ) from err
 
     async def _async_fetch_status(self) -> BaseStationStatus:
         """Fetch the latest status from a fresh or existing BLE session."""

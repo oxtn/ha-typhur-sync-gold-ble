@@ -393,8 +393,11 @@ class TyphurBleClient:
             self.hass, self.address, connectable=True
         )
         if ble_device is None:
+            diagnostics = bluetooth.async_address_reachability_diagnostics(
+                self.hass, self.address, bluetooth.BluetoothReachabilityIntent.CONNECTION
+            )
             raise TyphurConnectionError(
-                f"No connectable BLE device for {self.address}"
+                f"No connectable BLE device for {self.address}: {diagnostics}"
             )
         client = None
         try:
