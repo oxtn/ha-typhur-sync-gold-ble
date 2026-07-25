@@ -57,11 +57,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a Typhur Sync Gold BLE config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
-        coordinator: TyphurDataUpdateCoordinator | None = hass.data[DOMAIN].pop(
-            entry.entry_id, None
-        )
-        if coordinator is not None:
-            await coordinator.async_shutdown()
+        hass.data[DOMAIN].pop(entry.entry_id, None)
         if not hass.data[DOMAIN]:
             hass.data.pop(DOMAIN)
     return unload_ok

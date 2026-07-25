@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+from contextlib import suppress
 import logging
 
 from bleak import BleakError
@@ -135,8 +136,11 @@ class TyphurDataUpdateCoordinator(DataUpdateCoordinator[BaseStationStatus]):
 
     async def async_shutdown(self) -> None:
         """Shut down coordinator resources."""
+        await super().async_shutdown()
         if self._unavailable_refresh_task is not None:
             self._unavailable_refresh_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._unavailable_refresh_task
             self._unavailable_refresh_task = None
         if self._unavailable_cancel is not None:
             self._unavailable_cancel()
@@ -182,8 +186,8 @@ class TyphurDataUpdateCoordinator(DataUpdateCoordinator[BaseStationStatus]):
             and not self._unavailable_refresh_task.done()
         ):
             return
-        _LOGGER.warning(
-            "Typhur %s: BLE connection became unavailable; scheduling reconnect",
+        _LOGGER.debug(
+            "Typhur %s: BLE connection became unavailable; scheduling refresh",
             self.address,
         )
         self._unavailable_refresh_task = self.hass.async_create_task(
