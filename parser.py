@@ -199,7 +199,14 @@ def build_command(
 
 
 def build_auth_command(
-    address: str, device_type: str | None, user_id: str, cmd_seq_no: int
+    address: str,
+    device_type: str | None,
+    user_id: str,
+    cmd_seq_no: int,
+    *,
+    length_unit: str,
+    temperature_unit: str,
+    weight_unit: str,
 ) -> dict[str, Any]:
     """Build an authentication/trust request."""
     return build_command(
@@ -210,7 +217,10 @@ def build_auth_command(
         {
             "userId": user_id,
             "deviceModel": "TB132FU",
-            "mode": "direct"
+            "lengthUnit": length_unit,
+            "mode": "direct",
+            "temperatureUnit": temperature_unit,
+            "weightUnit": weight_unit,
         },
     )
 
