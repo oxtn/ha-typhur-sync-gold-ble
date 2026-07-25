@@ -210,10 +210,7 @@ def build_auth_command(
         {
             "userId": user_id,
             "deviceModel": "TB132FU",
-            "lengthUnit": "cm",
-            "mode": "direct",
-            "temperatureUnit": "C",
-            "weightUnit": "g",
+            "mode": "direct"
         },
     )
 
