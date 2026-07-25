@@ -492,11 +492,13 @@ class TyphurBleClient:
             temperature_unit,
             weight_unit,
         )
+
+        requested_user_id = user_id or DUMMY_USER_ID
         
         command = build_auth_command(
             self.address,
             device_type,
-            user_id or DUMMY_USER_ID,
+            requested_user_id,
             self._next_command_sequence(),
             length_unit=length_unit,
             temperature_unit=temperature_unit,
@@ -556,21 +558,42 @@ class TyphurBleClient:
                 discovered_user_id,
             )
 
+        discovered_user_id = extract_user_id(receipt)
+        discovered_device_type = extract_device_type(receipt)
         cmd_data = receipt.get("cmdData")
 
-        if (
+        auth_failed = (
             isinstance(cmd_data, dict)
             and cmd_data.get("executeResult") == "failure"
-        ):
+        )
+
+        if auth_failed:
+            if (
+                discovered_user_id
+                and discovered_user_id != requested_user_id
+            ):
+                _LOGGER.debug(
+                    "Typhur %s: auth rejected for userId=%s, "
+                    "but device sent userId=%s; retrying with discovered ID",
+                    self.address,
+                    requested_user_id,
+                    discovered_user_id,
+                )
+                return TyphurAuthResult(
+                    user_id=discovered_user_id,
+                    device_type=discovered_device_type,
+                )
+
             raise TyphurProtocolError(
                 "Typhur authentication rejected: "
                 f"cmdError={cmd_data.get('cmdError')}, "
-                f"errorCode={cmd_data.get('errorCode')}"
+                f"errorCode={cmd_data.get('errorCode')}, "
+                f"userId={requested_user_id}"
             )
         
         return TyphurAuthResult(
             user_id=discovered_user_id,
-            device_type=extract_device_type(receipt),
+            device_type=discovered_device_type,
         )
 
     async def request_status(self, device_type: str) -> BaseStationStatus:
