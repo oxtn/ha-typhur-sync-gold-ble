@@ -21,6 +21,7 @@ from bleak_retry_connector import (
 )
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from homeassistant.components import bluetooth
+from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant, callback
 
 from .const import (
@@ -469,9 +470,37 @@ class TyphurBleClient:
         Sends the trust command and waits for the receipt. If the receipt
         contains a different userId, we extract it for the caller to use.
         """
+        use_imperial_units = (
+            self.hass.config.units.temperature_unit
+            == UnitOfTemperature.FAHRENHEIT
+        )
+
+        if use_imperial_units:
+            length_unit = "in"
+            temperature_unit = "F"
+            weight_unit = "oz"
+        else:
+            length_unit = "cm"
+            temperature_unit = "C"
+            weight_unit = "g"
+
+        _LOGGER.debug(
+            "Typhur %s: using Home Assistant units "
+            "length=%s, temperature=%s, weight=%s",
+            self.address,
+            length_unit,
+            temperature_unit,
+            weight_unit,
+        )
+        
         command = build_auth_command(
-            self.address, device_type, user_id or DUMMY_USER_ID,
+            self.address,
+            device_type,
+            user_id or DUMMY_USER_ID,
             self._next_command_sequence(),
+            length_unit=length_unit,
+            temperature_unit=temperature_unit,
+            weight_unit=weight_unit,
         )
         cmd_id = command.get("cmdId")
         _LOGGER.debug(
@@ -525,6 +554,18 @@ class TyphurBleClient:
                 "Typhur %s: discovered user ID from auth receipt: %s",
                 self.address,
                 discovered_user_id,
+            )
+
+        cmd_data = receipt.get("cmdData")
+
+        if (
+            isinstance(cmd_data, dict)
+            and cmd_data.get("executeResult") == "failure"
+        ):
+            raise TyphurProtocolError(
+                "Typhur authentication rejected: "
+                f"cmdError={cmd_data.get('cmdError')}, "
+                f"errorCode={cmd_data.get('errorCode')}"
             )
         
         return TyphurAuthResult(
