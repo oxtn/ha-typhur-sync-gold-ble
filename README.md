@@ -45,7 +45,7 @@ A Home Assistant custom integration for **Typhur Sync Gold** Bluetooth meat ther
 
 ## Requirements
 
-- Home Assistant 2024.1+
+- Home Assistant 2026.6+
 - Bluetooth adapter or proxy within range of the base station
 
 ## Installation
