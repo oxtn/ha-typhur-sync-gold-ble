@@ -17,7 +17,6 @@ from typing import Any
 from bleak import BleakClient, BleakError
 from bleak_retry_connector import (
     BleakClientWithServiceCache,
-    BleakScanner,
     establish_connection,
 )
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -394,11 +393,9 @@ class TyphurBleClient:
             self.hass, self.address, connectable=True
         )
         if ble_device is None:
-            ble_device = await BleakScanner.find_device_by_address(
-                self.address, timeout=10.0
+            raise TyphurConnectionError(
+                f"No connectable BLE device for {self.address}"
             )
-        if ble_device is None:
-            raise TyphurConnectionError(f"No connectable BLE device for {self.address}")
         client = None
         try:
             self._reset_protocol_state()
@@ -412,7 +409,9 @@ class TyphurBleClient:
             )
             self._client = client
             if self._client is not client or not client.is_connected:
-                raise TyphurConnectionError(f"Disconnected while connecting to {self.address}")
+                raise TyphurConnectionError(
+                    f"Disconnected while connecting to {self.address}"
+                )
             with suppress(AttributeError):
                 await client.get_services()
             with suppress(AttributeError):
@@ -421,16 +420,22 @@ class TyphurBleClient:
                 NOTIFY_CHARACTERISTIC_UUID, self._notification_handler
             )
             await asyncio.sleep(2.0)
-        except (BleakError, TimeoutError) as err:
+        except (
+            BleakError, TimeoutError, OSError, asyncio.TimeoutError,
+        ) as err:
             self._client = None
-            with suppress(BleakError, TimeoutError):
+            with suppress(
+                BleakError, TimeoutError, OSError, asyncio.TimeoutError,
+            ):
                 if client is not None and client.is_connected:
                     self._disconnect_expected = True
                     try:
                         await client.disconnect()
                     finally:
                         self._disconnect_expected = False
-            raise TyphurConnectionError(f"Failed to connect to {self.address}: {err}") from err
+            raise TyphurConnectionError(
+                f"Failed to connect to {self.address}: {err}"
+            ) from err
 
     async def disconnect(self) -> None:
         """Disconnect from the BLE device."""
